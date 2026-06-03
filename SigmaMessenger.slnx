@@ -11,6 +11,9 @@
   <Folder Name="/Shared/">
     <Project Path="SigmaMessenger.Shared/SigmaMessenger.Shared.csproj" />
   </Folder>
+  <Folder Name="/Элементы решения/">
+    <File Path="README.md" />
+  </Folder>
   <Project Path="SigmaMessenger/SigmaMessenger.csproj">
     <BuildDependency Project="AuthService/AuthService.csproj" />
     <BuildDependency Project="ChatService/ChatService.csproj" />
