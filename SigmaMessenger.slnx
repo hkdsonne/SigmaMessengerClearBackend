@@ -1,0 +1,23 @@
+<Solution>
+  <Folder Name="/ApiGateway/" />
+  <Folder Name="/docker-compose.yml/" />
+  <Folder Name="/Services/">
+    <Project Path="AuthService/AuthService.csproj" />
+    <Project Path="ChatService/ChatService.csproj" />
+    <Project Path="FileService/FileService.csproj" Id="d73d9eb1-dcae-4ce8-8553-fe7bd2aa265c" />
+    <Project Path="MailService/MailService.csproj" />
+    <Project Path="UeerService/UeerService.csproj" />
+  </Folder>
+  <Folder Name="/Shared/">
+    <Project Path="SigmaMessenger.Shared/SigmaMessenger.Shared.csproj" />
+  </Folder>
+  <Project Path="SigmaMessenger/SigmaMessenger.csproj">
+    <BuildDependency Project="AuthService/AuthService.csproj" />
+    <BuildDependency Project="ChatService/ChatService.csproj" />
+    <BuildDependency Project="FileService/FileService.csproj" />
+    <BuildDependency Project="MailService/MailService.csproj" />
+    <BuildDependency Project="SigmaMessenger.Shared/SigmaMessenger.Shared.csproj" />
+    <BuildDependency Project="UeerService/UeerService.csproj" />
+  </Project>
+  <Project Path="SigmaTests/SigmaTests.csproj" Id="d1fb8649-3394-460e-bd80-a1dc3079adc5" />
+</Solution>

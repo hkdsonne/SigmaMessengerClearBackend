@@ -1,0 +1,39 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AspNetCoreRateLimit" Version="5.0.0" />
+    <PackageReference Include="AWSSDK.S3" Version="4.0.22.1" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.15" />  
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.15" />   
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.15">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.11" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
+    <PackageReference Include="SixLabors.ImageSharp.Web" Version="3.2.0" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
+	  <!-- рудименты проекта - доска позорников
+    <PackageReference Include="System.IO.Compression" Version="4.3.0" /> - под вопросом - на карандашике
+    <PackageReference Include="Ydb.Sdk" Version="0.21.0" />   
+    <PackageReference Include="Ydb.Sdk.Yc.Auth" Version="0.3.0" />
+    <PackageReference Include="Ydb.Sdk" Version="0.31.0" />
+    <PackageReference Include="Ydb.Sdk.Yc.Auth" Version="0.3.0" />
+	 -->
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SigmaMessenger.Shared\SigmaMessenger.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="DTOs\" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,664 @@
+# docker-compose.yml
+#
+# Блок services - описание всех контейнеров
+services:
+  #
+#  # Брокер RabbitMQ
+#  rabbitmq:
+#    image: rabbitmq:4.2-management-alpine
+#    #
+#    container_name: rabbitmq_to_messenger
+#    #
+#    hostname: rabbitmq
+#    #
+#    restart: always
+#    #
+#    environment:
+#      - RABBITMQ_DEFAULT_USER=${RABBITMQ_DEFAULT_USER}
+#      #
+#      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_DEFAULT_PASS}
+#      #
+#      # Стандартный виртуальный хост. Очереди для каждого сервиса будут отдельными
+#      ## Имя виртуального хоста нужно, чтобы отделить сервисы мессенджера от других 
+#      ## возможных программ работающих с rabbitmq
+#      - RABBITMQ_DEFAULT_VHOST=${RABBITMQ_DEFAULT_VHOST:-/}
+#      #
+#      # Значение оставшегося своодного пространства, ниже которого
+#      ## rabbitmq уйдет в защиту и перестанет писать. Установлю 2 гб
+#      # consumer_timeout - максимальное ожидание ответа от сервисов. 20 минут
+#      - RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=-rabbit disk_free_limit "{abs,2147483648}" +rabbit consumer_timeout 1200000
+#      #
+#    #
+#    # Лимиты ресурсов контейнера
+#    deploy:
+#      resources:
+#        limits:
+#          cpus: '2'      # Не более 2 ядер CPU
+#          memory: 8G     # Не более 8GB RAM
+#        # Гарантированный минимум
+#        reservations:
+#          cpus: '0.5'
+#          memory: 1G
+#    #
+#    volumes:
+#      # Внутренние логи rabbitmq 
+#      - rabbitmq_logs:/var/log/rabbitmq
+#      #
+#      # Сохранение всех сообщений (персистентности)
+#      - rabbitmq_data:/var/lib/rabbitmq
+#      #
+#      # Конфигурационные файлы
+#      - ./rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+#      - ./rabbitmq/advanced.config:/etc/rabbitmq/advanced.config:ro
+#    #
+#    ports:
+#      - "5672:5672"   # Незашифрованный трафик общения сервисов
+#      - "5671:5671"   # Зашифрованный трафик общения сервисов
+#      - "15672:15672" # Веб панель управления
+#    #
+#    # Используемые сети
+#    networks:
+#      - broker_net_internet
+#      - back_net_no_internet
+#    #
+#    healthcheck:
+#      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+#      interval: 30s
+#      timeout: 10s
+#      retries: 5
+#      start_period: 30s
+#    #
+#    # Логи docker контейнера (вкл/выкл и тп)
+#    logging:
+#      driver: "json-file"
+#      options:
+#        max-size: "10m"
+#        max-file: "3"
+#  #
+  #
+  #
+  #
+  # Сервис аутентификации
+  auth_service:
+    env_file:
+      - .env
+    build:
+      context: .
+      dockerfile: AuthService/Dockerfile
+      #
+      args:
+        - SERVICE_PORT=${AUTH_SERVICE_PORT}
+    #
+    container_name: auth_service_to_messenger
+    #
+    restart: always
+    #
+    environment:
+      - SERVICE_PORT=${AUTH_SERVICE_PORT}
+      - AUTH_SERVICE_PORT=${AUTH_SERVICE_PORT}
+      # Для работы с RabbitMQ
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_USER=${RABBITMQ_DEFAULT_USER}
+      - RABBITMQ_PASS=${RABBITMQ_DEFAULT_PASS}
+      - RABBITMQ_VHOST=${RABBITMQ_DEFAULT_VHOST:-/}
+      #
+      - FRONT_IP=${FRONT_IP}
+      #
+      # Для работы с PostgreSQL
+      - POSTGRESQL_HOST=${POSTGRESQL_HOST}
+      - POSTGRESQL_PORT=${POSTGRESQL_PORT}
+      - POSTGRESQL_DATABASE_USERS=${POSTGRESQL_DATABASE_USERS}
+      - POSTGRESQL_USERNAME_USERS=${POSTGRESQL_USERNAME_USERS}
+      - POSTGRESQL_PASSWORD_USERS=${POSTGRESQL_PASSWORD_USERS}
+      # SSL для постгреса
+      - DB_SSL_MODE=${DB_SSL_MODE}
+      - DB_TRUST_SERVER_CERT=${DB_TRUST_SERVER_CERT}
+      - DB_AUTH_CLIENT_CERT_PATH=${DB_AUTH_CLIENT_CERT_PATH}
+      - DB_AUTH_CA_CERT_PATH=${DB_AUTH_CA_CERT_PATH}
+      - DB_USER_CLIENT_CERT_PATH=${DB_USER_CLIENT_CERT_PATH}
+      - DB_USER_CA_CERT_PATH=${DB_USER_CA_CERT_PATH}
+      - DB_FILE_CLIENT_CERT_PATH=${DB_FILE_CLIENT_CERT_PATH}
+      - DB_FILE_CA_CERT_PATH=${DB_FILE_CA_CERT_PATH}
+      - DB_CHAT_CLIENT_CERT_PATH=${DB_CHAT_CLIENT_CERT_PATH}
+      - DB_CHAT_CA_CERT_PATH=${DB_CHAT_CA_CERT_PATH}
+      #
+      # Адрес почтового сервиса
+      - MAIL_SERVICE_IP=${MAIL_SERVICE_IP}
+      #
+      # Настройки приложения
+      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Production}
+      - ASPNETCORE_URLS=http://+:${AUTH_SERVICE_PORT}
+      #
+      # Логирование
+      - Logging__LogLevel__Default=${LOG_LEVEL:-Information}
+      - Logging__LogLevel__Microsoft_AspNetCore=${LOG_LEVEL:-Warning}
+    #
+    # Лимиты ресурсов
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    #
+    volumes:
+      # Логи приложения
+      - auth_service_logs:/app/logs
+      # Сертификаты для mTLS (только чтение)
+      - ./Postgres_SSL_certs/auth-service:/certs:ro
+    #
+    # Сети: Сеть с доступом к интернету. Тк это вебсокет и он не работает через брокер
+    networks:
+      - back_net_internet
+    #
+ #   # Зависимость от RabbitMQ
+ #   depends_on:
+ #     rabbitmq:
+ #       condition: service_healthy
+    #
+    # Health check для сервиса
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:${AUTH_SERVICE_PORT}/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+    #
+    # Логи docker контейнера
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    #
+    ports:
+      - "${AUTH_SERVICE_PORT}:${AUTH_SERVICE_PORT}"
+  #
+  #
+  # Сервис чатов
+  chats_service:
+    env_file:
+      - .env
+    build:
+      context: .
+      dockerfile: ChatService/Dockerfile
+      #
+      args:
+        - SERVICE_PORT=${CHATS_SERVICE_PORT}
+    #
+    container_name: chats_service_to_messenger
+    #
+    restart: always
+    #
+    environment:
+      - SERVICE_PORT=${CHATS_SERVICE_PORT}
+      - CHATS_SERVICE_PORT=${CHATS_SERVICE_PORT}
+      #
+      # Для работы с RabbitMQ
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_USER=${RABBITMQ_DEFAULT_USER}
+      - RABBITMQ_PASS=${RABBITMQ_DEFAULT_PASS}
+      - RABBITMQ_VHOST=${RABBITMQ_DEFAULT_VHOST:-/}
+      #
+      - FRONT_IP=${FRONT_IP}
+      #
+      # Для работы с PostgreSQL
+      - CHAT_DB_HOST=${CHAT_DB_HOST}
+      - CHAT_DB_PORT=${CHAT_DB_PORT}
+      - CHAT_DB_NAME=${CHAT_DB_NAME}
+      - CHAT_DB_USER=${CHAT_DB_USER}
+      - CHAT_DB_PASSWORD=${CHAT_DB_PASSWORD}
+      #
+      # SSL для PostgreSQL
+      - DB_SSL_MODE=${DB_SSL_MODE}
+      - DB_TRUST_SERVER_CERT=${DB_TRUST_SERVER_CERT}
+      - DB_AUTH_CLIENT_CERT_PATH=${DB_AUTH_CLIENT_CERT_PATH}
+      - DB_AUTH_CA_CERT_PATH=${DB_AUTH_CA_CERT_PATH}
+      - DB_USER_CLIENT_CERT_PATH=${DB_USER_CLIENT_CERT_PATH}
+      - DB_USER_CA_CERT_PATH=${DB_USER_CA_CERT_PATH}
+      - DB_FILE_CLIENT_CERT_PATH=${DB_FILE_CLIENT_CERT_PATH}
+      - DB_FILE_CA_CERT_PATH=${DB_FILE_CA_CERT_PATH}
+      - DB_CHAT_CLIENT_CERT_PATH=${DB_CHAT_CLIENT_CERT_PATH}
+      - DB_CHAT_CA_CERT_PATH=${DB_CHAT_CA_CERT_PATH}
+      #
+      - AUTH_SERVICE_IP=${AUTH_SERVICE_IP}
+      #
+      # Настройки приложения
+      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Production}
+      - ASPNETCORE_URLS=http://+:${CHATS_SERVICE_PORT}
+      #
+      # Логирование
+      - Logging__LogLevel__Default=${LOG_LEVEL:-Information}
+      - Logging__LogLevel__Microsoft_AspNetCore=${LOG_LEVEL:-Warning}
+    #
+    # Лимиты ресурсов
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    #
+    volumes:
+      # Логи приложения
+      - chats_service_logs:/app/logs
+      # Сертификаты для mTLS
+      - ./Postgres_SSL_certs/chats-service:/certs:ro
+    #
+    # Сети: Сеть с доступом к интернету. Тк это вебсокет и он не работает через брокер
+    networks:
+      - back_net_internet
+    #
+    # Зависимость от RabbitMQ
+  #  depends_on:
+  #    rabbitmq:
+  #      condition: service_healthy
+    #
+    # Health check для сервиса
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:${CHATS_SERVICE_PORT}/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+    #
+    # Логи docker контейнера
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    #
+    ports:
+      - "${CHATS_SERVICE_PORT}:${CHATS_SERVICE_PORT}"
+  #
+  #
+  # Файловый сервис
+  file_service:
+    env_file:
+      - .env
+    build:
+      context: .
+      dockerfile: FileService/Dockerfile
+      #
+      args:
+        - SERVICE_PORT=${FILE_SERVICE_PORT}
+    #
+    container_name: file_service_to_messenger
+    #
+    restart: always
+    #
+    environment:
+      - SERVICE_PORT=${FILE_SERVICE_PORT}
+      - FILE_SERVICE_PORT=${FILE_SERVICE_PORT}
+      #
+      # Для работы с RabbitMQ
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_USER=${RABBITMQ_DEFAULT_USER}
+      - RABBITMQ_PASS=${RABBITMQ_DEFAULT_PASS}
+      - RABBITMQ_VHOST=${RABBITMQ_DEFAULT_VHOST:-/}
+      #
+      # Для работы с PostgreSQL
+      - FILE_PS_DB_HOST=${FILE_PS_DB_HOST}
+      - FILE_PS_DB_PORT=${FILE_PS_DB_PORT}
+      - FILE_PS_DB_NAME=${FILE_PS_DB_NAME}
+      - FILE_PS_DB_USER=${FILE_PS_DB_USER}
+      - FILE_PS_DB_PASSWORD=${FILE_PS_DB_PASSWORD}
+      - DB_SSL_MODE=${DB_SSL_MODE}
+      - DB_TRUST_SERVER_CERT=${DB_TRUST_SERVER_CERT}
+      - DB_AUTH_CLIENT_CERT_PATH=${DB_AUTH_CLIENT_CERT_PATH}
+      - DB_AUTH_CA_CERT_PATH=${DB_AUTH_CA_CERT_PATH}
+      - DB_USER_CLIENT_CERT_PATH=${DB_USER_CLIENT_CERT_PATH}
+      - DB_USER_CA_CERT_PATH=${DB_USER_CA_CERT_PATH}
+      - DB_FILE_CLIENT_CERT_PATH=${DB_FILE_CLIENT_CERT_PATH}
+      - DB_FILE_CA_CERT_PATH=${DB_FILE_CA_CERT_PATH}
+      - DB_CHAT_CLIENT_CERT_PATH=${DB_CHAT_CLIENT_CERT_PATH}
+      - DB_CHAT_CA_CERT_PATH=${DB_CHAT_CA_CERT_PATH}
+      #
+      - FRONT_IP=${FRONT_IP}
+      #
+      - FILE_SERVICE_IP=${FILE_SERVICE_IP}
+      #
+      - YDB_FILE_ENDPOINT=${YDB_FILE_ENDPOINT}
+      - YDB_FILE_DATABASE=${YDB_FILE_DATABASE}
+      #
+      # Настройки приложения
+      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Production}
+      - ASPNETCORE_URLS=http://+:${FILE_SERVICE_PORT}
+      #
+      # Логирование
+      - Logging__LogLevel__Default=${LOG_LEVEL:-Information}
+      - Logging__LogLevel__Microsoft_AspNetCore=${LOG_LEVEL:-Warning}
+    #
+    # Лимиты ресурсов
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    #
+    volumes:
+      # Логи приложения
+      - file_service_logs:/app/logs
+      - ./Postgres_SSL_certs/file-service:/certs:ro
+    #
+    # Сети: Сеть с доступом к интернету. Тк это вебсокет и он не работает через брокер
+    networks:
+      - back_net_internet
+    #
+ #   # Зависимость от RabbitMQ
+ #   depends_on:
+ #     rabbitmq:
+ #       condition: service_healthy
+ #   #
+    # Health check для сервиса
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:${FILE_SERVICE_PORT}/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+    #
+    # Логи docker контейнера
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    #
+    ports:
+      - "${FILE_SERVICE_PORT}:${FILE_SERVICE_PORT}"
+  #
+  # Почтовый сервис
+  mail_service:
+    env_file:
+      - .env
+    build:
+      context: .
+      dockerfile: MailService/Dockerfile
+      #
+      args:
+        - SERVICE_PORT=${MAIL_SERVICE_PORT}
+    #
+    container_name: mail_service_to_messenger
+    #
+    restart: always
+    #
+    environment:
+      - SERVICE_PORT=${MAIL_SERVICE_PORT}
+      - MAIL_SERVICE_PORT=${MAIL_SERVICE_PORT}
+      #
+      # Для работы с RabbitMQ
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_USER=${RABBITMQ_DEFAULT_USER}
+      - RABBITMQ_PASS=${RABBITMQ_DEFAULT_PASS}
+      - RABBITMQ_VHOST=${RABBITMQ_DEFAULT_VHOST:-/}
+      #
+      - FRONT_IP=${FRONT_IP}
+      #
+      - MAIL_HOST=${MAIL_HOST}
+      - MAIL_PORT=${MAIL_PORT}
+      - MAIL_USERNAME=${MAIL_USERNAME}
+      - MAIL_PASSWORD=${MAIL_PASSWORD}
+      #
+      # Настройки приложения
+      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Production}
+      - ASPNETCORE_URLS=http://+:${MAIL_SERVICE_PORT}
+      #
+      # Логирование
+      - Logging__LogLevel__Default=${LOG_LEVEL:-Information}
+      - Logging__LogLevel__Microsoft_AspNetCore=${LOG_LEVEL:-Warning}
+    #
+    # Лимиты ресурсов
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    #
+    volumes:
+      # Логи приложения
+      - mail_service_logs:/app/logs
+    #
+    # Сети: Сеть с доступом к интернету. Тк это вебсокет и он не работает через брокер
+    networks:
+      - back_net_internet
+    #
+ #   # Зависимость от RabbitMQ
+ #   depends_on:
+ #     rabbitmq:
+ #       condition: service_healthy
+    #
+    # Health check для сервиса
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:${MAIL_SERVICE_PORT}/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+    #
+    # Логи docker контейнера
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    #
+    ports:
+      - "${MAIL_SERVICE_PORT}:${MAIL_SERVICE_PORT}"
+  #
+  # Сервис пользователей
+  user_service:
+    env_file:
+      - .env
+    build:
+      context: .
+      dockerfile: UeerService/Dockerfile
+      #
+      args:
+        - SERVICE_PORT=${USER_SERVICE_PORT}
+    #
+    container_name: user_service_to_messenger
+    #
+    restart: always
+    #
+    environment:
+      - SERVICE_PORT=${USER_SERVICE_PORT}
+      - USER_SERVICE_PORT=${USER_SERVICE_PORT}
+      #
+      # Для работы с RabbitMQ
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_USER=${RABBITMQ_DEFAULT_USER}
+      - RABBITMQ_PASS=${RABBITMQ_DEFAULT_PASS}
+      - RABBITMQ_VHOST=${RABBITMQ_DEFAULT_VHOST:-/}
+      #
+      # Для работы с PostgreSQL
+      - USER_PS_DB_HOST=${USER_PS_DB_HOST}
+      - USER_PS_DB_PORT=${USER_PS_DB_PORT}
+      - USER_PS_DB_NAME=${USER_PS_DB_NAME}
+      - USER_PS_DB_USER=${USER_PS_DB_USER}
+      - USER_PS_DB_PASSWORD=${USER_PS_DB_PASSWORD}
+      - DB_SSL_MODE=${DB_SSL_MODE}
+      - DB_TRUST_SERVER_CERT=${DB_TRUST_SERVER_CERT}
+      - DB_AUTH_CLIENT_CERT_PATH=${DB_AUTH_CLIENT_CERT_PATH}
+      - DB_AUTH_CA_CERT_PATH=${DB_AUTH_CA_CERT_PATH}
+      - DB_USER_CLIENT_CERT_PATH=${DB_USER_CLIENT_CERT_PATH}
+      - DB_USER_CA_CERT_PATH=${DB_USER_CA_CERT_PATH}
+      - DB_FILE_CLIENT_CERT_PATH=${DB_FILE_CLIENT_CERT_PATH}
+      - DB_FILE_CA_CERT_PATH=${DB_FILE_CA_CERT_PATH}
+      - DB_CHAT_CLIENT_CERT_PATH=${DB_CHAT_CLIENT_CERT_PATH}
+      - DB_CHAT_CA_CERT_PATH=${DB_CHAT_CA_CERT_PATH}
+      #
+      - FRONT_IP=${FRONT_IP}
+      #
+      - YDB_ENDPOINT=${YDB_ENDPOINT}
+      - YDB_DATABASE=${YDB_DATABASE}
+      #
+      - AUTH_SERVICE_IP=${AUTH_SERVICE_IP}
+      #
+      # Настройки приложения
+      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Production}
+      - ASPNETCORE_URLS=http://+:${USER_SERVICE_PORT}
+      #
+      # Логирование
+      - Logging__LogLevel__Default=${LOG_LEVEL:-Information}
+      - Logging__LogLevel__Microsoft_AspNetCore=${LOG_LEVEL:-Warning}
+    #
+    # Лимиты ресурсов
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    #
+    volumes:
+      # Логи приложения
+      - user_service_logs:/app/logs
+      - ./Postgres_SSL_certs/user-service:/certs:ro
+    #
+    # Сети: Сеть с доступом к интернету. Тк это вебсокет и он не работает через брокер
+    networks:
+      - back_net_internet
+    #
+ #   # Зависимость от RabbitMQ
+ #   depends_on:
+ #     rabbitmq:
+ #       condition: service_healthy
+    #
+    # Health check для сервиса
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:${USER_SERVICE_PORT}/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+    #
+    # Логи docker контейнера
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    #
+    ports:
+      - "${USER_SERVICE_PORT}:${USER_SERVICE_PORT}"
+#
+#
+#
+# Описание volumes 
+volumes:
+  #
+ # # Логи rabbitmq
+ # rabbitmq_logs:
+ #   driver: local
+ #   # Если будет внешнее хранилище или рейд
+ #   # driver_opts:.....
+ # #
+ # # Все сообщения rabbitmq
+ # rabbitmq_data:
+ #   driver: local
+  #
+  auth_service_logs:
+    driver: local
+  #
+  chats_service_logs:
+    driver: local
+  #
+  file_service_logs:
+    driver: local
+  #
+  mail_service_logs:
+    driver: local
+  #
+  user_service_logs:
+    driver: local
+#
+#
+# Описание сетей
+# Три отдельных сети:
+## 1. back_net_internet - Бэкенд с доступом в интернет - обращение к ним напрямую
+## 2. back_net_no_internet - Бэкенд без доступа в интернет - доступ через брокер
+## 3. broker_net_internet - Брокер с доступом к интернету - обращение к сервисам бэка извне
+networks:
+  broker_net_internet:
+    # bridge - закрытая сеть на одном хосте. Внутри сети компоуза каждый 
+    #   сервис будет иметь свой ip
+    # host - без сетевой изоляции. Будет занимать порт адреса хоста
+    # overlay - соединяет несколько хостов с Docker между собой
+    # macvlan - каждый контейнер будет иметь свой мак адрес, будет как 
+    #   отдельный сетевой адаптер в ОС хоста
+    # ipvlan - аналог macvlan, только все контейнеры будут иметь общий мак
+    # none - полностью отключить сеть для контейнера
+    driver: bridge
+    #
+    # Опционально - параметры сети
+    ipam:
+      config:
+        - subnet: 172.24.0.0/24
+          gateway: 172.24.0.1
+        #- subnet: 172.24.0.0/16 # Резервирование всей сети 172.24.х.х
+          #ip_range: 172.24.0.0/24 # Выделение конкретных адресов
+    #
+    # Настройка межконтейнерного взаимодействие -
+    ## нужно будет связать сети фронта и бэка
+    #driver_opts:
+    #  # Название виртуального моста в хостовой ОС
+    #  com.docker.network.bridge.name: "broker_net_internet_br"
+    #  #
+    #  # Разрешить межконтейнерное взаимодействие
+    #  com.docker.network.bridge.enable_icc: "true"
+    #  #
+    #  # Разрешить контейнеру доступ в интернет - работа с сервисами извне, получение обновлений, NTP
+    #  com.docker.network.bridge.enable_ip_masquerade: "false"
+  #
+  back_net_no_internet:
+    driver: bridge
+    #
+    internal: true # Запрет доступа в интернет
+    #
+    ipam:
+      config:
+        - subnet: 172.25.0.0/24
+          gateway: 172.25.0.1
+    #
+    #driver_opts:
+     # # Название виртуального моста в хостовой ОС
+     # com.docker.network.bridge.name: "back_net_no_internet_br"
+     # #
+     # # Разрешить межконтейнерное взаимодействие
+     # com.docker.network.bridge.enable_icc: "true"
+  #
+  back_net_internet:
+    driver: bridge
+    #
+    #internal: true # Запрет доступа в интернет
+    #
+    ipam:
+      config:
+        - subnet: 172.29.0.0/24
+          gateway: 172.29.0.1
+    #
+    #driver_opts:
+     # # Название виртуального моста в хостовой ОС
+     # com.docker.network.bridge.name: "back_net_internet_br"
+     # #
+     # # Разрешить межконтейнерное взаимодействие
+     # com.docker.network.bridge.enable_icc: "true"
